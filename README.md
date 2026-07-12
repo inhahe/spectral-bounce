@@ -17,6 +17,8 @@ bands, 400–700 nm) and only converted to sRGB at the very end, by integrating
 against the CIE 1931 colour-matching functions. This is done on the GPU with a
 WebGL2 multiple-render-target pipeline so it runs per-pixel in real time.
 
+**Live demo:** <https://inhahe.com/spectral-bounce/>
+
 ## Run it
 
 Because the app loads spectral data files, the most reliable way is a tiny local
@@ -50,8 +52,11 @@ fallback.
     draw are skipped, so you never get “tofu” boxes.
 - **Population** — number of shapes; **Speed (mean)** and **Speed spread (σ)**:
   each shape's speed is drawn from a normal (bell-curve) distribution whose mean
-  and standard deviation you set live; and **Brightness**, a global multiplier on
-  the final resolved image (applies in both subtractive and additive modes).
+  and standard deviation you set live; and **Brightness**. In *subtractive* mode
+  brightness changes the **filters only** — the white background (or the
+  illuminant's tint) stays fixed while the coloured shapes darken toward black or
+  brighten toward the background across the slider's full range. In *additive*
+  mode it is an ordinary linear exposure on the black background.
 - **White light** — choose the illuminant SPD (default 6500 K blackbody). The
   6500 K reference reads as neutral white; other lights visibly tint the whole
   scene (warm under 3200 K, cool under 9500 K) and shift every filter's colour.
@@ -104,7 +109,11 @@ This rewrites the JSON files **and** the `spectra_bundle.js` fallback.
    converts XYZ→linear sRGB (D65), applies a **fixed** white balance keyed to the
    *default* illuminant (so that light reads as neutral white while other lights
    tint the scene warm/cool rather than being normalised away), applies the
-   global brightness multiplier, and gamma-encodes.
+   brightness control, and gamma-encodes. Brightness is a linear exposure in
+   additive mode; in subtractive mode it is a per-channel power curve anchored at
+   the background colour (`bg·(rgb/bg)^(1/brightness)`), so the background is left
+   untouched — `pow(1)==1` — while only the filters, which sit below the
+   background, change brightness.
 
 ## Requirements
 
