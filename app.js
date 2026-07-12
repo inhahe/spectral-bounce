@@ -228,7 +228,6 @@ uniform vec4  u_white[4];
 uniform vec4  u_cmfX[4], u_cmfY[4], u_cmfZ[4];   // pre-scaled by 1/Yw
 uniform mat3  u_xyz2rgb;
 uniform vec3  u_wb;          // white-balance (per-channel) so white -> (1,1,1)
-uniform vec3  u_bg;          // resolved background colour (unfiltered white)
 uniform float u_exposure;
 uniform int   u_applyWhite;  // 1 subtractive, 0 additive
 out vec4 frag;
@@ -244,22 +243,47 @@ void main() {
   vec4 a1 = texture(u_t1, v_uv);
   vec4 a2 = texture(u_t2, v_uv);
   vec4 a3 = texture(u_t3, v_uv);
-  if (u_applyWhite == 1) { a0 *= u_white[0]; a1 *= u_white[1]; a2 *= u_white[2]; a3 *= u_white[3]; }
+  if (u_applyWhite == 1) {
+    // Subtractive: brightness reshapes each filter's transmittance in spectral
+    // space, anchored at full transmission (T == 1, i.e. the unfiltered white
+    // background). An exponent < 1 thins every filter toward clear (brighter);
+    // > 1 deepens it (darker, more saturated). Because the anchor is T == 1, the
+    // background -- all bands exactly 1 -- stays pure white, yet every filter
+    // still responds, including saturated primaries whose peak band sits just
+    // below 1 (a per-channel RGB curve would freeze those: pow(1)==1, pow(0)==0).
+    //
+    // The exponent is mapped *geometrically* from the brightness value b (0..4,
+    // default 1) so the slider spreads evenly in perceived darkness instead of
+    // exploding hyperbolically at the low end (b->0 with a plain 1/b sends the
+    // exponent to infinity, cramming all the darkening into the last sliver of
+    // travel and snapping to black). Anchored at b==1 -> exponent 1 (no change):
+    // the whole lower half (b: 1->0) ramps the exponent up to 2^6 == 64 for deep,
+    // adjustable near-black colours, while the upper half (b: 1->4) eases it down
+    // to 2^-2 == 0.25, thinning filters toward clear.
+    float b = u_exposure;
+    float lk = (b <= 1.0) ? 6.0 * (1.0 - b) : -2.0 * (b - 1.0) / 3.0;
+    float k = exp2(lk);
+    a0 = pow(clamp(a0, 0.0, 1.0), vec4(k));
+    a1 = pow(clamp(a1, 0.0, 1.0), vec4(k));
+    a2 = pow(clamp(a2, 0.0, 1.0), vec4(k));
+    a3 = pow(clamp(a3, 0.0, 1.0), vec4(k));
+    a0 *= u_white[0]; a1 *= u_white[1]; a2 *= u_white[2]; a3 *= u_white[3];
+  }
   float X = dot(a0, u_cmfX[0]) + dot(a1, u_cmfX[1]) + dot(a2, u_cmfX[2]) + dot(a3, u_cmfX[3]);
   float Y = dot(a0, u_cmfY[0]) + dot(a1, u_cmfY[1]) + dot(a2, u_cmfY[2]) + dot(a3, u_cmfY[3]);
   float Z = dot(a0, u_cmfZ[0]) + dot(a1, u_cmfZ[1]) + dot(a2, u_cmfZ[2]) + dot(a3, u_cmfZ[3]);
   vec3 rgb = (u_xyz2rgb * vec3(X, Y, Z)) * u_wb;
-  if (u_applyWhite == 1) {
-    // Subtractive: brightness affects the *filters* only, never the white
-    // background. A per-channel power curve anchored at the background colour
-    // leaves the background fixed (pow(1.0) == 1.0) while the filters -- which
-    // always sit below the background -- darken or brighten smoothly across the
-    // whole slider range instead of the scene collapsing to black at the low end.
-    vec3 n = rgb / max(u_bg, vec3(1e-4));
-    rgb = u_bg * pow(max(n, 0.0), vec3(1.0 / max(u_exposure, 1e-3)));
-  } else {
-    // Additive: ordinary linear exposure on a black background.
-    rgb *= u_exposure;
+  if (u_applyWhite == 0) {
+    // Additive: brightness is an exposure/gain on the luminous colour. The gain
+    // is mapped *geometrically* from the brightness value b (0..4, default 1),
+    // i.e. in photographic stops, anchored at b==1 -> gain 1. This mirrors the
+    // subtractive curve so the dark end is a broad, adjustable range of dim
+    // colours instead of a linear multiply that snaps to black in the last
+    // sliver of travel. The lower half (b: 1->0) fades the gain down to 2^-6,
+    // the upper half (b: 1->4) raises it to 2^2 == 4x.
+    float b = u_exposure;
+    float g = (b <= 1.0) ? -6.0 * (1.0 - b) : 2.0 * (b - 1.0) / 3.0;
+    rgb *= exp2(g);
   }
   frag = vec4(srgb(rgb), 1.0);
 }`;
@@ -336,7 +360,6 @@ class SpectralRenderer {
       cmfZ: gl.getUniformLocation(r, "u_cmfZ"),
       xyz2rgb: gl.getUniformLocation(r, "u_xyz2rgb"),
       wb: gl.getUniformLocation(r, "u_wb"),
-      bg: gl.getUniformLocation(r, "u_bg"),
       exposure: gl.getUniformLocation(r, "u_exposure"),
       applyWhite: gl.getUniformLocation(r, "u_applyWhite"),
     };
@@ -426,7 +449,6 @@ class SpectralRenderer {
     gl.uniform4fv(this.uRes.cmfZ, u.cmfZ);
     gl.uniformMatrix3fv(this.uRes.xyz2rgb, false, u.xyz2rgbColMajor);
     gl.uniform3fv(this.uRes.wb, u.wb);
-    gl.uniform3fv(this.uRes.bg, u.bg);
     gl.uniform1f(this.uRes.exposure, u.brightness);
     gl.uniform1i(this.uRes.applyWhite, additive ? 0 : 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -651,14 +673,6 @@ class App {
     const k = 1 / Yw;
     const wb = this._refWB();
 
-    // Resolved colour of the unfiltered background (spectrum == white SPD).
-    // Used in subtractive mode to anchor the brightness curve so the background
-    // stays put while only the filters change brightness. Under the reference
-    // illuminant this is ~(1,1,1); other lights make it a warm/cool tint.
-    const [Xw, Yw2, Zw] = specToXYZ(white, this.cmf);
-    const bgRGB = xyz2rgb(Xw * k, Yw2 * k, Zw * k);
-    const bg = new Float32Array([bgRGB[0] * wb[0], bgRGB[1] * wb[1], bgRGB[2] * wb[2]]);
-
     const packVec4 = (arr) => { const o = new Float32Array(16); o.set(arr); return o; };
     const cmfXs = this.cmf.x.map((v) => v * k);
     const cmfYs = this.cmf.y.map((v) => v * k);
@@ -675,7 +689,6 @@ class App {
       cmfX: packVec4(cmfXs), cmfY: packVec4(cmfYs), cmfZ: packVec4(cmfZs),
       xyz2rgbColMajor: colMajor,
       wb: new Float32Array(wb),
-      bg,
       brightness: this.brightness || 1,
     };
     this.recomputeEmission();

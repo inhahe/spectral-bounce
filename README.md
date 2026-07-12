@@ -56,7 +56,9 @@ fallback.
   brightness changes the **filters only** — the white background (or the
   illuminant's tint) stays fixed while the coloured shapes darken toward black or
   brighten toward the background across the slider's full range. In *additive*
-  mode it is an ordinary linear exposure on the black background.
+  mode it is an exposure/gain on the luminous colours. Either way the slider is
+  mapped geometrically (in photographic stops) so the dark end is a broad,
+  adjustable range of deep/dim colours rather than an abrupt cliff to black.
 - **White light** — choose the illuminant SPD (default 6500 K blackbody). The
   6500 K reference reads as neutral white; other lights visibly tint the whole
   scene (warm under 3200 K, cool under 9500 K) and shift every filter's colour.
@@ -104,16 +106,27 @@ This rewrites the JSON files **and** the `spectra_bundle.js` fallback.
    across 4 RGBA textures:
    - subtractive: buffer starts at 1.0, each shape **multiply-blends** `T(λ)`;
    - additive: buffer starts at 0.0, each shape **add-blends** `white(λ)·T(λ)`.
-3. A resolve pass reconstructs the 16-band spectrum per pixel, multiplies by the
-   white SPD (subtractive only), integrates against the CMFs to get CIE XYZ,
-   converts XYZ→linear sRGB (D65), applies a **fixed** white balance keyed to the
-   *default* illuminant (so that light reads as neutral white while other lights
-   tint the scene warm/cool rather than being normalised away), applies the
-   brightness control, and gamma-encodes. Brightness is a linear exposure in
-   additive mode; in subtractive mode it is a per-channel power curve anchored at
-   the background colour (`bg·(rgb/bg)^(1/brightness)`), so the background is left
-   untouched — `pow(1)==1` — while only the filters, which sit below the
-   background, change brightness.
+3. A resolve pass reconstructs the 16-band spectrum per pixel. In subtractive
+   mode the **brightness** control is applied here, in *spectral* space: every
+   band of the transmittance is raised to an exponent before the white SPD is
+   multiplied in. The exponent is mapped *geometrically* from the slider (evenly
+   in log space, anchored at exponent 1 in the middle) so that the dark end is a
+   broad, adjustable range of deep colours rather than a hyperbolic cliff to
+   black. This is anchored at full transmission (`T=1`, the unfiltered
+   background) — an exponent `<1` thins each filter toward clear (brighter), `>1`
+   deepens it (darker, more saturated). Because the anchor is `T=1`, the
+   background — all bands exactly 1, so `pow(1)==1` — stays pure
+   white, yet *every* filter still responds, including saturated primaries whose
+   peak band sits just below 1 (a per-channel RGB curve would wrongly freeze
+   those, since one channel sits at the background level and the others at 0).
+4. The spectrum is then multiplied by the white SPD (subtractive only) and
+   integrated against the CMFs to get CIE XYZ, converted XYZ→linear sRGB (D65),
+   given a **fixed** white balance keyed to the *default* illuminant (so that
+   light reads as neutral white while other lights tint the scene warm/cool
+   rather than being normalised away), and gamma-encoded. In additive mode
+   brightness is instead an exposure/gain applied to the resolved colour (the
+   background is black), using the same geometric slider→stops mapping as the
+   subtractive exponent so both modes ease smoothly into the dark end.
 
 ## Requirements
 
