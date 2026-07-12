@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spectral Bounce</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>Spectral&nbsp;Bounce</h1>
+    <p class="sub">Bouncing shapes whose colours combine as real
+       <b>spectral</b> filters &mdash; not RGB blends.</p>
+
+    <div id="controls">
+    <section>
+      <h2>Mode</h2>
+      <label class="radio"><input type="radio" name="mode" value="subtractive" checked>
+        Filters on white (subtractive)</label>
+      <label class="radio"><input type="radio" name="mode" value="additive">
+        Luminous on black (additive)</label>
+    </section>
+
+    <section>
+      <h2>Shape classes</h2>
+      <label><input type="checkbox" id="cls-circle" checked> Circles</label>
+      <label><input type="checkbox" id="cls-square" checked> Squares (rotating)</label>
+      <label><input type="checkbox" id="cls-rect"> Rectangles (rotating)</label>
+      <label><input type="checkbox" id="cls-glyph"> Font glyphs (rotating)</label>
+    </section>
+
+    <section id="glyph-opts">
+      <h2>Glyphs</h2>
+      <label class="stack">Font
+        <select id="font"></select>
+      </label>
+      <label class="stack">Load font file
+        <input type="file" id="font-file"
+               accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" />
+      </label>
+      <label class="stack">Character set
+        <select id="charset">
+          <option value="unicode" selected>Unicode (all printable)</option>
+          <option value="emoji">Emoji</option>
+          <option value="ascii">ASCII (letters, numbers, symbols &lt; 127)</option>
+          <option value="cp437">CP437 (DOS)</option>
+          <option value="custom">Custom (type below)</option>
+        </select>
+      </label>
+      <label class="stack" id="chars-wrap">Custom characters
+        <input type="text" id="glyph-chars" value="AB@8&?" />
+      </label>
+    </section>
+
+    <section>
+      <h2>Population</h2>
+      <label class="stack">Shapes: <output id="count-out">14</output>
+        <input type="range" id="count" min="1" max="120" value="14" />
+      </label>
+      <label class="stack">Speed (mean): <output id="speed-out">1.0&times;</output>
+        <input type="range" id="speed" min="0" max="300" value="100" />
+      </label>
+      <label class="stack">Speed spread (&sigma;): <output id="spread-out">0.40</output>
+        <input type="range" id="spread" min="0" max="150" value="40" />
+      </label>
+      <label class="stack">Brightness: <output id="brightness-out">1.0&times;</output>
+        <input type="range" id="brightness" min="0" max="400" value="100" />
+      </label>
+    </section>
+
+    <section>
+      <h2>White light</h2>
+      <select id="illuminant"></select>
+      <p class="hint">Spectral power distribution loaded from
+        <code>spectra/illuminants.json</code>.</p>
+    </section>
+
+    <section>
+      <h2>Filters in play</h2>
+      <div id="filter-list" class="chips"></div>
+      <p class="hint">Envelopes from <code>spectra/filters.json</code>.
+        Checked filters are randomly assigned to shapes.</p>
+    </section>
+
+    <section class="actions">
+      <button id="respawn">Respawn shapes</button>
+      <button id="pause">Pause</button>
+    </section>
+    </div>
+
+    <p id="status" class="status"></p>
+  </aside>
+
+  <main id="stage">
+    <canvas id="gl"></canvas>
+    <div id="error" class="error hidden"></div>
+  </main>
+</div>
+
+<!-- Embedded fallback so the app also works from file:// with no server. -->
+<script src="spectra_bundle.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
