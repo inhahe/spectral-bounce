@@ -50,7 +50,8 @@ fallback.
     (letters/numbers/symbols &lt; 127), *CP437* (the classic DOS code page), or
     *Custom* (type your own string). Characters the chosen font can't actually
     draw are skipped, so you never get “tofu” boxes.
-- **Population** — number of shapes; **Speed (mean)** and **Speed spread (σ)**:
+- **Population** — number of shapes; **Size** (a 0.2×–4× multiplier on the shape
+  radius); **Speed (mean)** and **Speed spread (σ)**:
   each shape's speed is drawn from a normal (bell-curve) distribution whose mean
   and standard deviation you set live; and **Brightness**. In *subtractive* mode
   brightness changes the **filters only** — the white background (or the
@@ -64,6 +65,13 @@ fallback.
   scene (warm under 3200 K, cool under 9500 K) and shift every filter's colour.
 - **Filters in play** — toggle which filter envelopes get randomly assigned.
 - **Respawn / Pause**.
+
+On phones (viewport ≤ 760 px) the control panel collapses into a thin sliver
+down the left edge and is hidden by default so the stage owns the screen — tap
+the sliver to slide the full drawer out. Phones also start with larger, faster
+shapes (Size ≈ 2.2×, Speed ≈ 1.75×) so they overlap and read well on a small
+display; both are just slider defaults you can change, and any matching URL
+parameter still wins.
 
 ### Deep-link / URL parameters
 
@@ -139,3 +147,9 @@ small offscreen buffer and checks it reads back as white; a driver that reports
 the float extension but renders the target as black fails that check and is
 dropped to the universally-supported 8-bit buffer. The `?nofloat` URL override
 forces the 8-bit buffer explicitly.
+
+
+## License
+
+MIT - see [LICENSE](LICENSE). Free to use, modify and redistribute; provided
+as-is, with no warranty.

@@ -261,12 +261,17 @@ void main() {
     // adjustable near-black colours, while the upper half (b: 1->4) eases it down
     // to 2^-2 == 0.25, thinning filters toward clear.
     float b = u_exposure;
-    float lk = (b <= 1.0) ? 6.0 * (1.0 - b) : -2.0 * (b - 1.0) / 3.0;
-    float k = exp2(lk);
-    a0 = pow(clamp(a0, 0.0, 1.0), vec4(k));
-    a1 = pow(clamp(a1, 0.0, 1.0), vec4(k));
-    a2 = pow(clamp(a2, 0.0, 1.0), vec4(k));
-    a3 = pow(clamp(a3, 0.0, 1.0), vec4(k));
+    // At b == 1 the exponent is exactly 1 (pow is identity), so skip the 16
+    // per-pixel pow() ops in the common default case. The branch is on a uniform,
+    // so it is coherent across the whole draw -- no divergence cost.
+    if (b != 1.0) {
+      float lk = (b <= 1.0) ? 6.0 * (1.0 - b) : -2.0 * (b - 1.0) / 3.0;
+      float k = exp2(lk);
+      a0 = pow(clamp(a0, 0.0, 1.0), vec4(k));
+      a1 = pow(clamp(a1, 0.0, 1.0), vec4(k));
+      a2 = pow(clamp(a2, 0.0, 1.0), vec4(k));
+      a3 = pow(clamp(a3, 0.0, 1.0), vec4(k));
+    }
     a0 *= u_white[0]; a1 *= u_white[1]; a2 *= u_white[2]; a3 *= u_white[3];
   }
   float X = dot(a0, u_cmfX[0]) + dot(a1, u_cmfX[1]) + dot(a2, u_cmfX[2]) + dot(a3, u_cmfX[3]);
@@ -768,7 +773,7 @@ class App {
     const base = Math.min(W, H);
     for (let i = 0; i < n; i++) {
       const type = pick(classes);
-      const size = rand(base * 0.045, base * 0.11);
+      const size = rand(base * 0.045, base * 0.11) * this.sizeScale;
       const fname = pick(filters);
       const spec = this.filterSpecs[fname];
       const emit = new Float32Array(16);
@@ -842,6 +847,15 @@ class App {
     if (!this.paused && this.shapes.length) stepPhysics(this.shapes, this.renderer.width, this.renderer.height, dt);
     this.resolveUniforms.brightness = this.brightness;
     this.renderer.render(this.shapes, this.mode, this.resolveUniforms);
+    // Rolling fps meter (updated ~2x/sec), shown in the status line.
+    if (this._fpsT0 === undefined) { this._fpsT0 = t; this._fpsN = 0; }
+    this._fpsN++;
+    if (t - this._fpsT0 >= 500) {
+      const fps = this._fpsN * 1000 / (t - this._fpsT0);
+      this._perf = `${fps.toFixed(0)} fps`;
+      this._fpsT0 = t; this._fpsN = 0;
+      if (t >= (this._flashUntil || 0)) this.setStatus();
+    }
     requestAnimationFrame((tt) => this.frame(tt));
   }
 
@@ -849,7 +863,8 @@ class App {
     const el = document.getElementById("status");
     const nf = this.activeFilters().length;
     el.textContent = `${this.shapes.length} shapes - ${nf} filters - ` +
-      `${this.renderer.floatOK ? "float" : "8-bit"} spectral buffer - data: ${this.data.source}`;
+      `${this.renderer.floatOK ? "float" : "8-bit"} spectral buffer - ` +
+      `${this._perf || "-"} - data: ${this.data.source}`;
   }
 
   // ---- UI ----
@@ -857,7 +872,7 @@ class App {
     // speed / spread / brightness defaults (speed is a fraction of min(W,H)/s;
     // spread is the bell-curve std-dev as a fraction of the mean speed;
     // brightness is a final output multiplier applied in both modes)
-    this.speed = 0.18; this.spread = 0.4; this.brightness = 1.0;
+    this.speed = 0.18; this.spread = 0.4; this.brightness = 1.0; this.sizeScale = 1.0;
 
     const bindRange = (id, outId, fn, fmt) => {
       const el = document.getElementById(id), out = document.getElementById(outId);
@@ -866,6 +881,8 @@ class App {
     };
     bindRange("count", "count-out", () => {}, (v) => v);
     document.getElementById("count").addEventListener("change", () => this.respawn());
+    bindRange("size", "size-out", (v) => { this.sizeScale = v / 100; }, (v) => (v / 100).toFixed(1) + "\u00d7");
+    document.getElementById("size").addEventListener("change", () => this.respawn());
     bindRange("speed", "speed-out", (v) => { this.speed = 0.18 * (v / 100); this.rescaleSpeed(); },
       (v) => (v / 100).toFixed(1) + "\u00d7");
     bindRange("spread", "spread-out", (v) => { this.spread = v / 100; this.resampleSpread(); },
@@ -922,6 +939,7 @@ class App {
       this.filterChecked[name] = true;
     this.renderFilterChips();
 
+    this.applyMobileDefaults();
     this.applyURLParams();
 
     document.getElementById("respawn").addEventListener("click", () => this.respawn());
@@ -931,6 +949,22 @@ class App {
       pauseBtn.textContent = this.paused ? "Play" : "Pause";
       pauseBtn.classList.toggle("active", this.paused);
     });
+
+    // Mobile: slide-in control drawer (toggle button + tap-outside to close).
+    const toggle = document.getElementById("panel-toggle");
+    const backdrop = document.getElementById("panel-backdrop");
+    const setDrawer = (open) => {
+      document.body.classList.toggle("panel-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle.setAttribute("aria-label", open ? "Hide controls" : "Show controls");
+      toggle.innerHTML = open ? "&#10005;" : "&#9776;";  // ✕ / ☰
+    };
+    if (toggle) {
+      toggle.addEventListener("click", () =>
+        setDrawer(!document.body.classList.contains("panel-open")));
+      if (backdrop) backdrop.addEventListener("click", () => setDrawer(false));
+      window.addEventListener("keydown", (e) => { if (e.key === "Escape") setDrawer(false); });
+    }
   }
 
   /** Add a font family to the dropdown (no duplicates). */
@@ -966,8 +1000,23 @@ class App {
   flashStatus(msg) {
     const el = document.getElementById("status");
     el.textContent = msg;
+    this._flashUntil = performance.now() + 5000;   // suppress meter refresh while flashing
     clearTimeout(this._flashT);
     this._flashT = setTimeout(() => this.setStatus(), 5000);
+  }
+
+  /** On phones the stage is small, so bigger, faster shapes read better and
+   *  overlap far more often. Bump the size + speed defaults (URL params, applied
+   *  next, still win). */
+  applyMobileDefaults() {
+    if (!window.matchMedia("(max-width: 760px)").matches) return;
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = val; el.dispatchEvent(new Event("input"));
+    };
+    set("size", 220);    // ~2.2x larger shapes -> frequent overlaps
+    set("speed", 175);   // noticeably livelier motion on small screens
   }
 
   /** Optional deep-link config, e.g. ?mode=additive&classes=circle,glyph&count=30 */

@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Spectral Bounce</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div id="app">
+  <button id="panel-toggle" type="button" aria-label="Show controls" aria-expanded="false">&#9776;</button>
+  <div id="panel-backdrop" hidden></div>
   <aside id="panel">
     <h1>Spectral&nbsp;Bounce</h1>
     <p class="sub">Bouncing shapes whose colours combine as real
@@ -57,6 +59,9 @@
       <h2>Population</h2>
       <label class="stack">Shapes: <output id="count-out">14</output>
         <input type="range" id="count" min="1" max="120" value="14" />
+      </label>
+      <label class="stack">Size: <output id="size-out">1.0&times;</output>
+        <input type="range" id="size" min="20" max="400" value="100" />
       </label>
       <label class="stack">Speed (mean): <output id="speed-out">1.0&times;</output>
         <input type="range" id="speed" min="0" max="300" value="100" />
