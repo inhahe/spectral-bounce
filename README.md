@@ -17,7 +17,7 @@ bands, 400–700 nm) and only converted to sRGB at the very end, by integrating
 against the CIE 1931 colour-matching functions. This is done on the GPU with a
 WebGL2 multiple-render-target pipeline so it runs per-pixel in real time.
 
-**Live demo:** <https://inhahe.com/spectral-bounce/>
+**Live demo:** <https://inhahe.github.io/spectral-bounce/>
 
 ## Run it
 
